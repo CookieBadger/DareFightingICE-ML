@@ -24,6 +24,7 @@ decay_rate = 0.0005
 epsilon = min_epsilon + (max_epsilon - min_epsilon)*np.exp(-decay_rate*0)
 
 
+
 ## tutorial: https://www.datacamp.com/tutorial/introduction-q-learning-beginner-tutorial
 
 class QLearningAI(AIInterface):
@@ -33,8 +34,6 @@ class QLearningAI(AIInterface):
         self.last_action = None
         self.last_state = None
         self.qtable = None
-        self.tableNr = 1
-        self.write = False
         now = datetime.datetime.now()
         self.time_str = str(now.hour) + "-" + str(now.minute)
         self.last_reward_log_time = 0   
@@ -50,12 +49,7 @@ class QLearningAI(AIInterface):
         self.key = Key()
         self.player = player_number
         self.game_data = game_data
-        self.qtable = QTable(self.tableNr, self.write)
-
-    def set_write(self, write):
-        self.write = write
-        if self.qtable:
-            self.qtable.write = write
+        self.qtable = QTable()
 
     def input(self) -> Key:
         return self.key
@@ -115,9 +109,9 @@ class QLearningAI(AIInterface):
         self.last_action = None
 
     def game_end(self):
-        if self.write:
-            self.qtable.write = True
         self.qtable.save()
+        QTable.instance_nr = 0
+        print("game ended")
 
     def epsilon_greedy_policy(self, state, epsilon):
         random_int = random.uniform(0,1)
@@ -167,7 +161,7 @@ class QLearningAI(AIInterface):
             self.log_reward(new_reward)
 
     def log_reward(self, reward):
-        print("logged reward: {:.2f}".format(reward))
+        #print("logged reward: {:.2f}".format(reward))
         file_name = "reward-log-" + self.time_str
         with open(file_name, "a") as myfile:
             myfile.write("{:.2f}, ".format(reward))
@@ -202,10 +196,12 @@ ENEMY_STATE = len(State)
 ACTIONS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B") # ignore special action for now
 
 class QTable:
-    
-    def __init__(self, nr, write):
-        self.file_path = 'q_table_'+ str(nr) + '.npy'
-        self.write = write
+    instance_nr = 0
+    def __init__(self):
+        self.write = QTable.instance_nr % 2 == 0
+        print("Qtable instance ", str(QTable.instance_nr), ", write: ", str(self.write))
+        QTable.instance_nr = QTable.instance_nr + 1
+        self.file_path = 'q_table_1.npy'
         try:
             # Load the Q-table from the file
             self.table = np.load(self.file_path)
@@ -242,10 +238,12 @@ class QTable:
     
     def save(self):
         if(self.write):
+            print("Updated table saved to ", self.file_path)
             np.save(self.file_path, self.table)
             
             # Load the Q-table from the file
             loaded_q_table = np.load(self.file_path)
 
             # Verify that the loaded Q-table is the same as the original one
-            print(np.array_equal(self.table, loaded_q_table))
+            if np.array_equal(self.table, loaded_q_table):
+                print("Savefile verified")

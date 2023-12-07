@@ -16,7 +16,6 @@ if __name__ == '__main__':
     character = 'ZEN'
     game_num = 1
     agent1 = QLearningAI()
-    agent1.set_write(True)
     gateway.register_ai("QLearningAI", agent1)
     gateway.load_agent(["QLearningAI"])
     gateway.start_ai()
