@@ -8,26 +8,32 @@ import datetime
 import os.path
 from math import *
 
+## Improvement: 
+# use energy levels and special action in states
+# use stageX and stageY parameters
+# print who won at end of round and end of game
+# use center of hitbox instead of player.x and enemy.x
+
 # Training parameters
-learning_rate = 0.1        
+learning_rate = 0.1
 
 # Evaluation parameters
-n_eval_episodes = 1000      
+n_eval_episodes = 1000
 
 # Environment parameters
 gamma = 0.95
 eval_seed = []
 
 # Exploration parameters
-max_epsilon = 1.0           
-min_epsilon = 0.05           
-decay_rate = 0.0005 
+max_epsilon = 1.0
+min_epsilon = 0.05 
+decay_rate = 0.005 
 
 
 
 ## tutorial: https://www.datacamp.com/tutorial/introduction-q-learning-beginner-tutorial
 
-class QLearningAI(AIInterface):
+class QLearningAI3(AIInterface):
     def __init__(self):
         super().__init__()
         self.blind_flag = False
@@ -36,7 +42,7 @@ class QLearningAI(AIInterface):
         self.qtable = None
         now = datetime.datetime.now()
         self.time_str = str(now.hour) + "-" + str(now.minute)
-        self.last_reward_log_time = 0   
+        self.last_reward_log_time = 0
         self.wins = 0
         self.losses = 0
         self.episode = 0
@@ -103,10 +109,21 @@ class QLearningAI(AIInterface):
         self.last_state = state
     
     def round_end(self, round_result: RoundResult):
+        print("Round End. Finished Episode ", self.episode)
         print(round_result.remaining_hps[0])
         print(round_result.remaining_hps[1])
         print(round_result.elapsed_frame)
+        if round_result.remaining_hps[0] > round_result.remaining_hps[1]:
+            print(self.__class__.__name__, " won!")
+            self.wins += 1
+        elif round_result.remaining_hps[0] < round_result.remaining_hps[1]:
+            print(self.__class__.__name__, " lost.")
+            self.losses += 1
+        else:
+            print("Tie.")
         self.last_action = None
+        self.episode += 1
+        self.log_episode()
 
     def game_end(self):
         self.qtable.save()
@@ -139,17 +156,28 @@ class QLearningAI(AIInterface):
         player_y = (player.top+player.bottom)/2
         enemy_x = (enemy.right+enemy.left)/2
         enemy_y = (enemy.top+enemy.bottom)/2
+        #player.hp, enemy.hp, player.energy, enemy.energy, self.last_action, player.state, player.action, enemy.state, enemy.action
         #print("pX: ", player_x, ", eX: ", enemy_x, ", pY: ", player_y, ", eY: ", enemy_y)
         player_enemy_y = enemy_y - player_y
         player_enemy_x = enemy_x - player_x
-        # quantized_player_x = round(min(max(player_x / GAME_WIDTH, 0), 1) * (PLAYER_X-1))
-        # quantized_enemy_x = round(min(max(enemy_x / GAME_WIDTH, 0), 1) * (ENEMY_X-1))
+        #half_qx = (PLAYER_ENEMY_X-1)/2 # half the length of the playerEnemyX state
+        #base=1.5
+        #power = pow(base, half_qx)-1
         
+        #quantized_player_enemy_x = round(min(max(player_enemy_x / GAME_WIDTH, -1), 1) * half_qx+half_qx)
+        #h = (player_enemy_x / GAME_WIDTH * power)
+        #sign = copysign(1, h)
+        #player_enemy_x_log = sign * log(abs(h+sign), base)
+        #quantized_player_enemy_x_log = round(player_enemy_x_log + half_qx)
         quantized_player_enemy_x_log = logarithmic_quantize_symmetric_around_zero(player_enemy_x, PLAYER_ENEMY_X, 1.5, GAME_WIDTH)
         
         half_qy = (PLAYER_ENEMY_Y-1)/2
         quantized_player_enemy_y = round(min(max(player_enemy_y / PLAY_HEIGHT, -1), 1) * half_qy+half_qy)
-        return (quantized_player_enemy_x_log, quantized_player_enemy_y, player_state.value, enemy_state.value)
+
+        player_energy = get_energy_level(player.energy)
+        enemy_energy = get_energy_level(enemy.energy)
+
+        return (quantized_player_enemy_x_log, quantized_player_enemy_y, player.state.value, enemy.state.value, player_energy, enemy_energy)
 
     def learn(self, action, state, reward):
         prev_reward = self.qtable.get_reward(action, state)
@@ -167,7 +195,7 @@ class QLearningAI(AIInterface):
         f = open(file_name, "a")
         f.write("{:.2f}, ".format(reward))
         f.close()
-        
+    
     def log_episode(self):
         #print("logged reward: {:.2f}".format(reward))
         f = open(self.episode_filename, "w")
@@ -184,6 +212,9 @@ class QLearningAI(AIInterface):
                 print("Continuing at episode ", e_str)
             f.close()
 
+
+        
+
 def logarithmic_quantize_symmetric_around_zero(x, quantization_steps, log_base, range):
     half_qx = (quantization_steps-1)/2 # half the length of the playerEnemyX state
     power = pow(log_base, half_qx)-1
@@ -192,6 +223,11 @@ def logarithmic_quantize_symmetric_around_zero(x, quantization_steps, log_base, 
     sign = copysign(1, h)
     log_x = sign * log(abs(h+sign), log_base)
     return round(log_x + half_qx)
+
+def get_energy_level(energy):
+    if energy >= 150: return 2
+    if energy >= 55: return 1
+    return 0
     
 
 # Multi-dimensional table for Q-learning. 
@@ -203,14 +239,29 @@ def logarithmic_quantize_symmetric_around_zero(x, quantization_steps, log_base, 
 # health (very roughly quantized)
 
 # QTable dimensions (quantizations):
-GAME_WIDTH = 800
-PLAY_HEIGHT = 200
+GAME_WIDTH = 960
+PLAY_HEIGHT = 500
 
 PLAYER_ENEMY_X = 21
 PLAYER_ENEMY_Y = 5 # needs to be odd
 PLAYER_STATE = len(State) # 4
 ENEMY_STATE = len(State)
-ACTIONS = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B") # ignore special action for now
+
+
+STAND_ACTIONS = ("FORWARD_WALK","DASH","BACK_STEP","CROUCH","FOR_JUMP","BACK_JUMP","STAND_GUARD","THROW_A","THROW_B","STAND_A","STAND_B","STAND_FA","STAND_FB","STAND_D_DF_FA","STAND_D_DF_FB","STAND_F_D_DFA","STAND_F_D_DFB","STAND_D_DB_BA","STAND_D_DB_BB","STAND_D_DF_FC")
+STAND_FREE_ACTIONS=("FORWARD_WALK","DASH","BACK_STEP","CROUCH","FOR_JUMP","BACK_JUMP","STAND_GUARD","STAND_A","STAND_B","STAND_FA","STAND_FB","STAND_F_D_DFA")
+STAND_ENERGY_ACTIONS=("THROW_A","THROW_B","STAND_D_DF_FA","STAND_D_DF_FB","STAND_F_D_DFB","STAND_D_DB_BA","STAND_D_DB_BB") # cost between 5 and 55 energy
+SPECIAL_ACTION=("STAND_D_DF_FC") # costs 150 energy
+
+AIR_ACTIONS = ("AIR_FA", "AIR_FB", "AIR_UA", "AIR_UB", "AIR_GUARD", "AIR_D_DF_FA", "AIR_D_DF_FB", "AIR_F_D_DFA", "AIR_F_D_DFB", "AIR_D_DB_BA", "AIR_D_DB_BB")
+AIR_FREE_ACTIONS=("AIR_FA", "AIR_FB", "AIR_UA", "AIR_UB", "AIR_GUARD")
+AIR_ENERGY_ACTIONS=("AIR_D_DF_FA", "AIR_D_DF_FB", "AIR_F_D_DFA", "AIR_F_D_DFB", "AIR_D_DB_BA", "AIR_D_DB_BB") # require between 5 and 50 energy
+
+CROUCH_ACTIONS = ("CROUCH_GUARD","CROUCH_A","CROUCH_B","CROUCH_FA","CROUCH_FB") # all free
+
+
+PLAYER_ENERGY = 3
+ENEMY_ENERGY = 3
 
 class QTable:
     instance_nr = 0
@@ -218,24 +269,24 @@ class QTable:
         self.write = QTable.instance_nr % 2 == 0
         print("Qtable instance ", str(QTable.instance_nr), ", write: ", str(self.write))
         QTable.instance_nr = QTable.instance_nr + 1
-        self.file_path = 'q_table_1.npy'
+        self.file_path = 'q_table_2.npy'
         try:
             # Load the Q-table from the file
             self.table = np.load(self.file_path)
         except FileNotFoundError:
             # doesn't exist
-            self.table = np.zeros((len(ACTIONS), PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE))
+            self.table = np.zeros((len(ACTIONS), PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
             
     
     def get_reward(self, action, state):
         action_idx = ACTIONS.index(action)
-        reward = self.table[action_idx, state[0], state[1], state[2], state[3]]
+        reward = self.table[action_idx, state[0], state[1], state[2], state[3], state[4], state[5]]
         #print("Reward at [",action_idx,",",state[0],",",state[1],",",state[2],"]: ", reward)
         return reward
     
     def update(self, action, state, reward):
         action_idx = ACTIONS.index(action)
-        self.table[action_idx, state[0], state[1], state[2], state[3]] = reward
+        self.table[action_idx, state[0], state[1], state[2], state[3], state[4], state[5]] = reward
     
     def get_best_action(self, state):
         return self.get_best(state)[0]
