@@ -1,6 +1,6 @@
 import logging
 import argparse
-from QLearningAI2 import QLearningAI2
+from QLearningAI3 import QLearningAI3
 from pyftg import Gateway
 
 if __name__ == '__main__':
@@ -15,9 +15,9 @@ if __name__ == '__main__':
     gateway = Gateway(port=args.port)
     character = 'ZEN'
     game_num = 1
-    agent1 = QLearningAI2()
-    gateway.register_ai("QLearningAI2", agent1)
-    gateway.load_agent(["QLearningAI2"])
+    agent1 = QLearningAI3()
+    gateway.register_ai("QLearningAI3", agent1)
+    gateway.load_agent(["QLearningAI3"])
     #gateway.load_agent([args.a1])
     gateway.start_ai()
     gateway.close()

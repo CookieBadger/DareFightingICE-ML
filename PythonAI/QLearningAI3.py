@@ -141,15 +141,31 @@ class QLearningAI3(AIInterface):
         if random_f > epsilon:
             action = self.qtable.get_best_action(state)
         else:
-            action = self.random_action()
+            action = self.random_action(state)
         return action
 
     def greedy_policy(self, state):
         action = self.qtable.get_best_action(state)
         return action
 
-    def random_action(self):
-        return ACTIONS[random.randint(0, len(ACTIONS)-1)]
+    def random_action(self, state):
+        energy_level = state[4]
+        possible_actions = ["5"] # idle
+        
+        if state[2] == State.AIR.value:
+            possible_actions = possible_actions + AIR_FREE_ACTIONS
+            if energy_level >= 2:
+                possible_actions = possible_actions + AIR_ENERGY_ACTIONS
+        elif state[2] == State.STAND.value:
+            possible_actions = possible_actions + STAND_FREE_ACTIONS
+            if energy_level >= 2:
+                possible_actions = possible_actions + STAND_ENERGY_ACTIONS
+            if energy_level >= 3:
+                possible_actions = possible_actions + SPECIAL_ACTION
+        elif state[2] == State.CROUCH.value:
+            possible_actions = possible_actions + CROUCH_ACTIONS + ["CROUCH"]
+                
+        return possible_actions[random.randint(0, len(possible_actions)-1)]
 
     def get_state(self, player, enemy):
         player_x = (player.right+player.left)/2
@@ -248,17 +264,20 @@ PLAYER_STATE = len(State) # 4
 ENEMY_STATE = len(State)
 
 
-STAND_ACTIONS = ("FORWARD_WALK","DASH","BACK_STEP","CROUCH","FOR_JUMP","BACK_JUMP","STAND_GUARD","THROW_A","THROW_B","STAND_A","STAND_B","STAND_FA","STAND_FB","STAND_D_DF_FA","STAND_D_DF_FB","STAND_F_D_DFA","STAND_F_D_DFB","STAND_D_DB_BA","STAND_D_DB_BB","STAND_D_DF_FC")
-STAND_FREE_ACTIONS=("FORWARD_WALK","DASH","BACK_STEP","CROUCH","FOR_JUMP","BACK_JUMP","STAND_GUARD","STAND_A","STAND_B","STAND_FA","STAND_FB","STAND_F_D_DFA")
-STAND_ENERGY_ACTIONS=("THROW_A","THROW_B","STAND_D_DF_FA","STAND_D_DF_FB","STAND_F_D_DFB","STAND_D_DB_BA","STAND_D_DB_BB") # cost between 5 and 55 energy
-SPECIAL_ACTION=("STAND_D_DF_FC") # costs 150 energy
+# Additional: IDLE ("5") possible in all states
+STAND_ACTIONS = ["FORWARD_WALK","DASH","BACK_STEP","CROUCH","FOR_JUMP","BACK_JUMP","STAND_GUARD","THROW_A","THROW_B","STAND_A","STAND_B","STAND_FA","STAND_FB","STAND_D_DF_FA","STAND_D_DF_FB","STAND_F_D_DFA","STAND_F_D_DFB","STAND_D_DB_BA","STAND_D_DB_BB","STAND_D_DF_FC"]
+STAND_FREE_ACTIONS=["FORWARD_WALK","DASH","BACK_STEP","CROUCH","FOR_JUMP","BACK_JUMP","STAND_GUARD","STAND_A","STAND_B","STAND_FA","STAND_FB","STAND_F_D_DFA"]
+STAND_ENERGY_ACTIONS=["THROW_A","THROW_B","STAND_D_DF_FA","STAND_D_DF_FB","STAND_F_D_DFB","STAND_D_DB_BA","STAND_D_DB_BB"] # cost between 5 and 55 energy
+SPECIAL_ACTION=["STAND_D_DF_FC"] # costs 150 energy
 
-AIR_ACTIONS = ("AIR_FA", "AIR_FB", "AIR_UA", "AIR_UB", "AIR_GUARD", "AIR_D_DF_FA", "AIR_D_DF_FB", "AIR_F_D_DFA", "AIR_F_D_DFB", "AIR_D_DB_BA", "AIR_D_DB_BB")
-AIR_FREE_ACTIONS=("AIR_FA", "AIR_FB", "AIR_UA", "AIR_UB", "AIR_GUARD")
-AIR_ENERGY_ACTIONS=("AIR_D_DF_FA", "AIR_D_DF_FB", "AIR_F_D_DFA", "AIR_F_D_DFB", "AIR_D_DB_BA", "AIR_D_DB_BB") # require between 5 and 50 energy
+AIR_ACTIONS = ["AIR_FA", "AIR_FB", "AIR_UA", "AIR_UB", "AIR_GUARD", "AIR_D_DF_FA", "AIR_D_DF_FB", "AIR_F_D_DFA", "AIR_F_D_DFB", "AIR_D_DB_BA", "AIR_D_DB_BB"]
+AIR_FREE_ACTIONS=["AIR_FA", "AIR_FB", "AIR_UA", "AIR_UB", "AIR_GUARD"]
+AIR_ENERGY_ACTIONS=["AIR_D_DF_FA", "AIR_D_DF_FB", "AIR_F_D_DFA", "AIR_F_D_DFB", "AIR_D_DB_BA", "AIR_D_DB_BB"] # require between 5 and 50 energy
 
-CROUCH_ACTIONS = ("CROUCH_GUARD","CROUCH_A","CROUCH_B","CROUCH_FA","CROUCH_FB") # all free
+CROUCH_ACTIONS = ["CROUCH_GUARD","CROUCH_A","CROUCH_B","CROUCH_FA","CROUCH_FB"] # all free; also add CROUCH and IDLE
 
+def get_all_actions():
+    return STAND_ACTIONS + AIR_ACTIONS + CROUCH_ACTIONS + ["5"]
 
 PLAYER_ENERGY = 3
 ENEMY_ENERGY = 3
@@ -269,23 +288,26 @@ class QTable:
         self.write = QTable.instance_nr % 2 == 0
         print("Qtable instance ", str(QTable.instance_nr), ", write: ", str(self.write))
         QTable.instance_nr = QTable.instance_nr + 1
-        self.file_path = 'q_table_2.npy'
+        self.file_path = 'q_table_3.npy'
         try:
             # Load the Q-table from the file
             self.table = np.load(self.file_path)
         except FileNotFoundError:
             # doesn't exist
-            self.table = np.zeros((len(ACTIONS), PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
+            #self.stand_table = np.zeros((len(STAND_ACTIONS)+1, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
+            #self.air_table = np.zeros((len(AIR_ACTIONS)+1, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
+            #self.crouch_table = np.zeros((len(CROUCH_ACTIONS)+2, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
+            self.table = np.zeros((len(STAND_ACTIONS)+len(AIR_ACTIONS)+len(CROUCH_ACTIONS)+1, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
             
     
     def get_reward(self, action, state):
-        action_idx = ACTIONS.index(action)
+        action_idx = self.get_action_idx(action)
         reward = self.table[action_idx, state[0], state[1], state[2], state[3], state[4], state[5]]
         #print("Reward at [",action_idx,",",state[0],",",state[1],",",state[2],"]: ", reward)
         return reward
     
     def update(self, action, state, reward):
-        action_idx = ACTIONS.index(action)
+        action_idx = self.get_action_idx(action)
         self.table[action_idx, state[0], state[1], state[2], state[3], state[4], state[5]] = reward
     
     def get_best_action(self, state):
@@ -293,16 +315,28 @@ class QTable:
     
     def get_best_reward(self, state):
         return self.get_best(state)[1]
-        
+    
     def get_best(self, state):
         max_reward = 0.0
         max_action = "6" # right
-        for action in ACTIONS:
+        for action in get_all_actions():
             reward = self.get_reward(action, state)
             if reward > max_reward:
                 max_reward = reward
                 max_action = action
         return (max_action, max_reward)
+    
+    def get_action_idx(self, action):
+        action_idx = 0
+        if action in STAND_ACTIONS:
+            action_idx = STAND_ACTIONS.index(action)
+        elif action in AIR_ACTIONS:
+            action_idx = len(STAND_ACTIONS)+AIR_ACTIONS.index(action)
+        elif action in CROUCH_ACTIONS:
+            action_idx = len(STAND_ACTIONS)+len(AIR_ACTIONS)+CROUCH_ACTIONS.index(action)
+        else:
+            action_idx = len(STAND_ACTIONS)+len(AIR_ACTIONS)+len(CROUCH_ACTIONS) # IDLE
+        return action_idx
     
     def save(self):
         if(self.write):
