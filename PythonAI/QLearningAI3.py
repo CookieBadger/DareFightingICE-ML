@@ -154,13 +154,13 @@ class QLearningAI3(AIInterface):
         
         if state[2] == State.AIR.value:
             possible_actions = possible_actions + AIR_FREE_ACTIONS
-            if energy_level >= 2:
+            if energy_level >= 1:
                 possible_actions = possible_actions + AIR_ENERGY_ACTIONS
         elif state[2] == State.STAND.value:
             possible_actions = possible_actions + STAND_FREE_ACTIONS
-            if energy_level >= 2:
+            if energy_level >= 1:
                 possible_actions = possible_actions + STAND_ENERGY_ACTIONS
-            if energy_level >= 3:
+            if energy_level >= 2:
                 possible_actions = possible_actions + SPECIAL_ACTION
         elif state[2] == State.CROUCH.value:
             possible_actions = possible_actions + CROUCH_ACTIONS + ["CROUCH"]
