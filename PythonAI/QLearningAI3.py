@@ -29,8 +29,6 @@ max_epsilon = 1.0
 min_epsilon = 0.05 
 decay_rate = 0.005 
 
-
-
 ## tutorial: https://www.datacamp.com/tutorial/introduction-q-learning-beginner-tutorial
 
 class QLearningAI3(AIInterface):
@@ -45,8 +43,11 @@ class QLearningAI3(AIInterface):
         self.last_reward_log_time = 0
         self.wins = 0
         self.losses = 0
+        self.games_won = 0
+        self.games_lost = 0
         self.episode = 0
         self.episode_filename = self.__class__.__name__ + "-episode"
+        self.special_action_count = 0
 
     def name(self) -> str:
         return self.__class__.__name__
@@ -124,13 +125,22 @@ class QLearningAI3(AIInterface):
         self.last_action = None
         self.episode += 1
         self.log_episode()
+        health_diff = round_result.remaining_hps[0] - round_result.remaining_hps[1]
+        self.log(self.__class__.__name__ + "_health-diff-log_" + self.time_str, health_diff)
 
     def game_end(self):
         self.qtable.save()
         QTable.instance_nr = 0
+        if self.wins > self.losses: 
+            self.games_won+=1
+        elif self.losses > self.wins:
+            self.games_lost += 1
+        
         print("---------------------------------")
         print("Game ended: ", self.__class__.__name__, "wins" if self.wins > self.losses else ("looses." if self.wins < self.losses else "ties with opponent."),\
                " (", self.wins, ":", self.losses, ")")
+        print("Special Action Count:", self.special_action_count)
+        print("Total games won vs lost: ", self.games_won, ":", self.games_lost)
         print("=================================")
         print(".")
         self.wins = 0
@@ -142,6 +152,8 @@ class QLearningAI3(AIInterface):
             action = self.qtable.get_best_action(state)
         else:
             action = self.random_action(state)
+        if action == SPECIAL_ACTION[0]: 
+            self.special_action_count += 1
         return action
 
     def greedy_policy(self, state):
@@ -203,15 +215,13 @@ class QLearningAI3(AIInterface):
         current_time = time.time()
         if current_time - self.last_reward_log_time > 1:
             self.last_reward_log_time = current_time
-            self.log_reward(new_reward)
-
-    def log_reward(self, reward):
-        #print("logged reward: {:.2f}".format(reward))
-        file_name = "reward-log-" + self.time_str
-        f = open(file_name, "a")
-        f.write("{:.2f}, ".format(reward))
-        f.close()
+            self.log(self.__class__.__name__ + "_reward-log_" + self.time_str, new_reward) ## log reward
     
+    def log(self, file_name, item):
+        f = open("logs/" + file_name, "a")
+        f.write("{:.2f}, ".format(item))
+        f.close()
+
     def log_episode(self):
         #print("logged reward: {:.2f}".format(reward))
         f = open(self.episode_filename, "w")
