@@ -41,7 +41,6 @@ class QLearningAI5(AIInterface):
     def __init__(self):
         super().__init__()
         self.blind_flag = False
-        self.current_action = None
         self.last_action = None
         self.last_state = None
         self.qtable = None
@@ -56,8 +55,6 @@ class QLearningAI5(AIInterface):
         self.episode_filename = self.__class__.__name__ + "-episode"
         self.special_action_count = 0
         self.written = False
-        self.forced_action = False
-        self.force_count = 0
 
     def name(self) -> str:
         return self.__class__.__name__
@@ -73,6 +70,13 @@ class QLearningAI5(AIInterface):
         self.qtable = QTable()
         self.load_episode()
 
+        self.image_ready_event = threading.Event()
+        self.image_display_thread = ImageDisplayThread(self.image_ready_event)
+        self.image_display_thread.start()
+
+    def __del__(self):
+        self.image_display_thread.stop()
+
     def input(self) -> Key:
         return self.key
 
@@ -82,6 +86,44 @@ class QLearningAI5(AIInterface):
 
     def get_screen_data(self, screen_data: ScreenData):
         self.screen_data = screen_data
+        
+        if not self.written and screen_data.display_bytes[0]!=0: 
+            mean, std = calculate_mean_std(screen_data.display_bytes)
+            mean_norm = mean / 255
+            std_norm = std / 255
+            print("mean: ", mean, "              norm: ", mean_norm)
+            print("std: ", std, "              norm: ", std_norm)
+            #self.written = True
+        
+        debug = False
+        if debug:
+            display_bytes = screen_data.display_bytes
+            length = len(display_bytes)
+            print(f"Length in bytes: {length}")
+            if self.written: 
+                return
+            with open('./test_image.bin', 'wb') as file:
+                file.write(display_bytes)
+                self.written = True
+
+
+                preview = display_bytes[:10]  # Preview the first 10 bytes
+                print(f"Data preview (first 10 bytes): {preview}")
+
+                hex_preview = display_bytes[:10].hex()  # Hexadecimal preview of the first 10 bytes
+                print(f"Hexadecimal preview (first 10 bytes): {hex_preview}")
+
+                byte_array = np.frombuffer(display_bytes, dtype=np.uint8)
+                print(f"Minimum byte value: {byte_array.min()}")
+                print(f"Maximum byte value: {byte_array.max()}")
+                print(f"Average byte value: {byte_array.mean()}")
+
+                # Example: Check if it's a PNG file
+                if display_bytes.startswith(b'\x89PNG\r\n\x1a\n'):
+                    print("This is likely a PNG file.")
+        else:
+            self.image_display_thread.update_image(screen_data.display_bytes)
+            self.image_ready_event.set()
         
 
     def get_audio_data(self, audio_data: AudioData):
@@ -97,18 +139,17 @@ class QLearningAI5(AIInterface):
         
         state = self.get_state(player, enemy)
 
-        if self.current_action:
-            if not self.forced_action: # only learn when action was not forced
-                time_passed = self.frame_data.current_frame_number / 60
-                max_hp = self.game_data.max_hps[1]
-                enemy_health_lost =  (max_hp - enemy.hp)/max_hp
-                player_health_lost =  (max_hp - player.hp)/max_hp
-                enemy_health_lost_over_time = enemy_health_lost / time_passed
-                player_health_lost_over_time = player_health_lost / time_passed
-                energy_reward = 0.375*(min(player.energy,200)/200)
-                reward = enemy_health_lost - player_health_lost + energy_reward
-                self.learn(self.current_action, self.last_state, reward)
-            self.current_action = None
+        if self.last_action:
+            time_passed = self.frame_data.current_frame_number / 60
+            max_hp = self.game_data.max_hps[1]
+            enemy_health_lost =  (max_hp - enemy.hp)/max_hp
+            player_health_lost =  (max_hp - player.hp)/max_hp
+            enemy_health_lost_over_time = enemy_health_lost / time_passed
+            player_health_lost_over_time = player_health_lost / time_passed
+            energy_reward = 0.375*(min(player.energy,200)/200)
+            reward = enemy_health_lost - player_health_lost + energy_reward
+            self.learn(self.last_action, self.last_state, reward)
+            self.last_action = None
         
         if self.cc.get_skill_flag():
             self.key = self.cc.get_skill_key()
@@ -117,15 +158,8 @@ class QLearningAI5(AIInterface):
             self.cc.skill_cancel()
             
             epsilon = min_epsilon + (max_epsilon - min_epsilon)*np.exp(-decay_rate*self.episode)
-            action = self.force_action_policy(state)
-            if action != None:
-                self.forced_action = True
-                self.force_count += 1
-            else:
-                action = self.epsilon_greedy_policy(state, epsilon)
-                self.forced_action = False
+            action = self.epsilon_greedy_policy(state, epsilon)
 
-            self.current_action = action
             self.last_action = action
 
             self.cc.command_call(action)
@@ -133,8 +167,6 @@ class QLearningAI5(AIInterface):
             # update Qtable with reward
             # choose action, remember state and action 
         self.last_state = state
-        if not self.forced_action:
-            self.force_count = 0
     
     def round_end(self, round_result: RoundResult):
         print("Round End. Finished Episode ", self.episode)
@@ -149,7 +181,7 @@ class QLearningAI5(AIInterface):
             self.losses += 1
         else:
             print("Tie.")
-        self.current_action = None
+        self.last_action = None
         self.episode += 1
         self.log_episode()
         health_diff = round_result.remaining_hps[0] - round_result.remaining_hps[1]
@@ -172,17 +204,7 @@ class QLearningAI5(AIInterface):
         print(".")
         self.wins = 0
         self.losses = 0
-
-    def force_action_policy(self, state):
-        started_crouching = self.last_action == "CROUCH"
-        started_idling = self.last_action == "5"
-        if started_crouching and state[2] != State.CROUCH.value: # if we crouch, commit to it
-            return "CROUCH" 
-        if started_idling and state[2] == State.CROUCH.value:
-            return "5" #idle
-        if self.force_count < 1 and self.last_action == "FORWARD_WALK":
-            return "FORWARD_WALK"
-        return None
+        self.image_display_thread.stop()
 
     def epsilon_greedy_policy(self, state, epsilon):
         random_f = random.uniform(0,1)
@@ -214,7 +236,7 @@ class QLearningAI5(AIInterface):
                 possible_actions = possible_actions + SPECIAL_ACTION
         elif state[2] == State.CROUCH.value:
             possible_actions = possible_actions + CROUCH_ACTIONS + ["CROUCH"]
-
+                
         return possible_actions[random.randint(0, len(possible_actions)-1)]
 
     def get_state(self, player, enemy):
@@ -256,14 +278,12 @@ class QLearningAI5(AIInterface):
             self.log(self.__class__.__name__ + "_reward-log_" + self.time_str, new_reward) ## log reward
     
     def log(self, file_name, item):
-        text = "{:.2f}, ".format(item)
-        path = "logs/" + file_name
-        if os.path.exists(path):
+        if os.path.exists(file_name):
             append_write = 'a' # append if already exists
         else:
             append_write = 'w' # make a new file if not
-        f = open(path, append_write)
-        f.write(text)
+        f = open("logs/" + file_name, append_write)
+        f.write("{:.2f}, ".format(item))
         f.close()
 
     def log_episode(self):
@@ -281,6 +301,8 @@ class QLearningAI5(AIInterface):
                 self.episode = e
                 print("Continuing at episode ", e_str)
             f.close()
+
+
         
 
 def logarithmic_quantize_symmetric_around_zero(x, quantization_steps, log_base, range):
@@ -297,6 +319,60 @@ def get_energy_level(energy):
     if energy >= 55: return 1
     return 0
     
+
+class ImageDisplayThread(threading.Thread):
+    def __init__(self, event):
+        super().__init__()
+        self.event = event
+        self.display_bytes = None
+        self.running = True
+        self.width = 300
+        self.height = 300
+
+    def run(self):
+        print("run")
+        self.root = tk.Tk()
+        self.root.geometry("300x300")
+        self.image_label = tk.Label(self.root)
+        self.image_label.pack()
+        self.root.bind('<Configure>', self.on_resize)
+
+        while self.running:
+            self.event.wait()  # Wait for new image data
+            if self.display_bytes:
+                #image = Image.frombytes('RGB', (960, 640), self.display_bytes)
+                #image = Image.open(io.BytesIO(self.display_bytes))
+                img_data = np.frombuffer(self.display_bytes, dtype=np.uint8)
+
+                # The data might need reshaping and reordering depending on how it's structured
+                # Assuming the data is in RGB format with each color in 8 bits and in the correct order
+                img_data = img_data.reshape((32, 64, 3))
+
+                # Create an image from the numpy array
+                image = Image.fromarray(img_data, 'RGB')
+                sq_size = min(round(self.width/2), self.height)
+                resized_image = image.resize((sq_size*2,sq_size), Image.Resampling.NEAREST)
+
+                photo = ImageTk.PhotoImage(resized_image)
+                #photo = ImageTk.PhotoImage(image)
+                self.image_label.config(image=photo)
+                self.image_label.image = photo  # Keep a reference
+
+            self.event.clear()
+
+            self.root.update_idletasks()
+            self.root.update()
+
+    def update_image(self, display_bytes):
+        self.display_bytes = display_bytes
+
+    def stop(self):
+        self.running = False
+        self.root.destroy()
+    
+    def on_resize(self, event):
+        self.width = event.width
+        self.height = event.height
 
 # Multi-dimensional table for Q-learning. 
 # Dimensions: 
@@ -340,7 +416,7 @@ class QTable:
         self.write = QTable.instance_nr % 2 == 0
         print("Qtable instance ", str(QTable.instance_nr), ", write: ", str(self.write))
         QTable.instance_nr = QTable.instance_nr + 1
-        self.file_path = 'q_table_5.npy'
+        self.file_path = 'q_table_4.npy'
         try:
             # Load the Q-table from the file
             self.table = np.load(self.file_path)
@@ -401,3 +477,37 @@ class QTable:
             # Verify that the loaded Q-table is the same as the original one
             if np.array_equal(self.table, loaded_q_table):
                 print("Savefile verified")
+
+
+def calculate_mean_std(image_bytes):
+    """
+    Calculate the mean and standard deviation of an image represented as a bytes object.
+
+    Parameters:
+    image_bytes (bytes): The image data in bytes format.
+
+    Returns:
+    tuple: Mean and standard deviation of the image.
+    """
+    # Convert bytes data to an image
+    img_data = np.frombuffer(image_bytes, dtype=np.uint8)
+    img_data = img_data.reshape((32, 64, 3))
+
+    # Create an image from the numpy array
+    image = Image.fromarray(img_data, 'RGB')
+
+    # Convert image to numpy array
+    image_np = np.array(image)
+    image_np = image_np / 255.0
+
+    # If the image has three channels (color image)
+    if len(image_np.shape) == 3:
+        # Calculate mean and std per channel
+        mean = np.mean(image_np, axis=(0, 1))
+        std = np.std(image_np, axis=(0, 1))
+    else:
+        # Calculate mean and std for a single channel (grayscale)
+        mean = np.mean(image_np)
+        std = np.std(image_np)
+
+    return mean, std

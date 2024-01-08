@@ -8,6 +8,11 @@ reward_file_name = "logs/QLearningAI4_reward-log_12-55"
 plt.figure()
 plt.tight_layout()
 
+def step(x: float):
+    if x > 0:
+        return 1.0
+    return 0.0
+
 if os.path.isfile(reward_file_name):
     f = open(reward_file_name, "r")
     reward_array = []
@@ -70,5 +75,20 @@ if os.path.isfile(health_diff_file_name):
     print(n_av_array)
     print(len(av_array)-(n-1))
     plt.plot(range(len(av_array)-4), n_av_array, "r-")
+
+    
+    win_array = []
+    i=2
+    while i < len(diff_array) :
+        wins = (step(diff_array[i-2])+ step(diff_array[i-1])+ step(diff_array[i]))
+        win_array.append(wins)
+        i += 3
+    f.close()
+    plt.subplot(224)
+    plt.bar(range(len(win_array)), win_array)
+    plt.xlabel("game nr")
+    plt.ylabel("Round Wins")
+    plt.title("Performance over Games (rounds won)")
+    #plt.yticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
 plt.show()
