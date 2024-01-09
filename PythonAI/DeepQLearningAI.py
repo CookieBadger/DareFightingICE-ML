@@ -63,16 +63,43 @@ i = 0
 actions = {0: "5"}
 stand_free_actions_nrs = []
 stand_energy_actions_nrs = []
+special_action_nrs = []
+air_free_actions_nrs = []
+air_energy_actions_nrs = []
+crouch_actions_nrs = []
+crouch_nr = 0
 
 for value in STAND_FREE_ACTIONS:
     i+=1
     stand_free_actions_nrs += [i]
     actions[i] = value
+    if value == "CROUCH":
+        crouch_nr = i
 
-#for value in STAND_ENERGY_ACTIONS:
-#    i+=1
-#    stand_energy_actions_nrs += [i]
-#    actions[i] = value
+for value in STAND_ENERGY_ACTIONS:
+    i+=1
+    stand_energy_actions_nrs += [i]
+    actions[i] = value
+
+for value in SPECIAL_ACTION:
+    i+=1
+    special_action_nrs += [i]
+    actions[i] = value
+
+for value in AIR_FREE_ACTIONS:
+    i+=1
+    air_free_actions_nrs += [i]
+    actions[i] = value
+
+for value in AIR_ENERGY_ACTIONS:
+    i+=1
+    air_energy_actions_nrs += [i]
+    actions[i] = value
+
+for value in CROUCH_ACTIONS:
+    i+=1
+    crouch_actions_nrs += [i]
+    actions[i] = value
 
 n_actions = len(actions)
 
@@ -80,12 +107,15 @@ class DeepQLearningAI(AIInterface):
     def __init__(self):
         super().__init__()
         self.blind_flag = False
+        self.current_action_tensor = None
         self.last_action = None
         self.last_state = None
+        self.forced_action = False
+        self.force_count = 0
         self.model = None
         now = datetime.datetime.now()
         self.time_str = str(now.hour) + "-" + str(now.minute)
-        self.last_reward_log_time = 0
+        self.last_reward_log_time = time.time()
         self.wins = 0
         self.losses = 0
         self.games_won = 0
@@ -93,6 +123,7 @@ class DeepQLearningAI(AIInterface):
         self.episode = 0
         self.episode_filename = self.__class__.__name__ + "-episode"
         self.special_action_count = 0
+        self.model_save_file = self.__class__.__name__ + ".pt"
 
     def name(self) -> str:
         return self.__class__.__name__
@@ -108,6 +139,9 @@ class DeepQLearningAI(AIInterface):
         self.load_episode()
 
         self.policy_net = DQN(n_actions, SCREENDATA_WIDTH, SCREENDATA_HEIGHT).to(device)
+        if os.path.exists(self.model_save_file):
+            self.policy_net.load_state_dict(torch.load(self.model_save_file))
+
         self.target_net = DQN(n_actions, SCREENDATA_WIDTH, SCREENDATA_HEIGHT).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
@@ -148,24 +182,30 @@ class DeepQLearningAI(AIInterface):
 
 
     def processing(self):
-        if self.frame_data.empty_flag or self.frame_data.current_frame_number <= 0:
+        if self.frame_data.empty_flag or self.frame_data.current_frame_number <= 0 or not self.screen_data:
             return
         
-        if self.last_action and self.last_state and self.screen_data:
-            reward = self.get_reward()
-            next_state = self.get_state()
-            self.memory.push(self.last_state, self.last_action, next_state,  reward)
+        player_state = self.frame_data.get_character(True) # todo, make dynamic to know which player we actually are
+
+        if self.current_action_tensor != None and self.last_state != None and self.screen_data != None:
+            if not self.forced_action:
+                reward = self.get_reward()
+                reward_tensor = torch.tensor([reward], device=device, dtype=torch.long)
+                next_state = self.get_state()
+                self.memory.push(self.last_state, self.current_action_tensor, next_state, reward_tensor)
+                
+                self.optimize_model()
+                
+                # Soft-update target network
+                target_net_state_dict = self.target_net.state_dict()
+                policy_net_state_dict = self.policy_net.state_dict()
+                for key in policy_net_state_dict:
+                    target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+                    self.target_net.load_state_dict(target_net_state_dict)
+
+                self.log_reward(reward)
             
-            self.optimize_model()
-            
-            # Soft-update target network
-            target_net_state_dict = self.target_net.state_dict()
-            policy_net_state_dict = self.policy_net.state_dict()
-            for key in policy_net_state_dict:
-                target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
-                self.target_net.load_state_dict(target_net_state_dict)
-            
-            self.last_action = None
+            self.current_action_tensor = None
 
         if self.cc.get_skill_flag():
             self.key = self.cc.get_skill_key()
@@ -174,11 +214,38 @@ class DeepQLearningAI(AIInterface):
             self.cc.skill_cancel()
             
             epsilon = MIN_EPSILON + (MAX_EPSILON - MIN_EPSILON) * math.exp(-self.episode * DECAY_RATE)
-            action = self.epsilon_greedy_policy(self.get_state(), epsilon)
+            
+            action = self.force_action_policy(player_state)
+            if action != None:
+                self.forced_action = True
+                self.force_count += 1
+            else:
+                action_tensor = self.epsilon_greedy_policy(self.get_state(), epsilon, player_state)
+                action = actions[action_tensor.item()]
+                self.forced_action = False
+            
+                self.current_action_tensor = action_tensor
+                self.last_state = self.get_state()
             self.last_action = action
-            self.cc.command_call(actions[action.item()])
 
-    def epsilon_greedy_policy(self, state, epsilon):
+            self.cc.command_call(action)
+        
+        if not self.forced_action:
+            self.force_count = 0
+    
+    def force_action_policy(self, state):
+        started_crouching = self.last_action == "CROUCH"
+        started_idling = self.last_action == "5"
+        stance = state.state.value
+        if started_crouching and stance != State.CROUCH.value: # if we crouch, commit to it
+            return "CROUCH" 
+        if started_idling and stance == State.CROUCH.value:
+            return "5" #idle
+        if self.force_count < 1 and self.last_action == "FORWARD_WALK":
+            return "FORWARD_WALK"
+        return None
+    
+    def epsilon_greedy_policy(self, state, epsilon, player_state):
         random_f = random.uniform(0,1)
         if random_f > epsilon:
             with torch.no_grad():
@@ -187,7 +254,7 @@ class DeepQLearningAI(AIInterface):
                 # found, so we pick action with the larger expected reward.
                 action =  self.policy_net(state).max(1).indices.view(1, 1)
         else:
-            action = self.random_action(state)
+            action = self.random_action(player_state)
         return action
     
     def optimize_model(self):
@@ -208,22 +275,38 @@ class DeepQLearningAI(AIInterface):
             next_state_values = self.target_net(next_states).max(1).values
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * GAMMA) + reward_batch
-
+        #print("reward batch: ", reward_batch.size())
         # Huber loss
         criterion = nn.SmoothL1Loss()
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        #print("calculating loss: nextstate_values ", next_state_values.size(), "; expected_state_action: ", expected_state_action_values.size())
+        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1)) ### check (debug) dimensions. C:\Users\Emil\AppData\Local\Programs\Python\Python310\lib\site-packages\torch\nn\modules\loss.py:933: UserWarning: Using a target size (torch.Size([128, 1, 128])) that is different to the input size (torch.Size([128, 1])). This will likely lead to incorrect results due to broadcasting. Please ensure they have the same size. return F.smooth_l1_loss(input, target, reduction=self.reduction, beta=self.beta)
 
         self.optimizer.zero_grad()
         loss.backward()
-        nn.utils.clip_grad_value(self.policy_net.parameters(), 100)
+        nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
         self.optimizer.step()
 
 
     def random_action(self, state):
-        possible_actions = [0]
-        possible_actions = possible_actions + stand_free_actions_nrs
-        action_nr = possible_actions[random.randint(0, len(possible_actions)-1)]
+        possible_actions = [0] # idle
+        stance = state.state.value
+        energy = state.energy
 
+        if stance == State.AIR.value:
+            possible_actions = possible_actions + air_free_actions_nrs
+            if energy >= 55:
+                possible_actions = possible_actions + air_energy_actions_nrs
+        elif stance == State.STAND.value:
+            possible_actions = possible_actions +  stand_free_actions_nrs
+            if energy >= 55:
+                possible_actions = possible_actions + stand_energy_actions_nrs
+            if energy >= 150:
+                possible_actions = possible_actions + special_action_nrs
+        elif stance == State.CROUCH.value:
+            possible_actions = possible_actions + crouch_actions_nrs + [crouch_nr]
+
+        action_nr = possible_actions[random.randint(0, len(possible_actions)-1)]
+    
         return torch.tensor([[action_nr]], device=device, dtype=torch.long)
 
     def get_reward(self):
@@ -248,6 +331,7 @@ class DeepQLearningAI(AIInterface):
             self.losses += 1
         else:
             print("Tie.")
+        self.current_action_tensor = None
         self.last_action = None
         self.episode += 1
         self.log_episode()
@@ -270,14 +354,24 @@ class DeepQLearningAI(AIInterface):
         print(".")
         self.wins = 0
         self.losses = 0
-        
+        torch.save(self.policy_net.state_dict(), self.model_save_file)
+    
+    def log_reward(self, new_reward):
+        current_time = time.time()
+        if current_time - self.last_reward_log_time > 1:
+            self.last_reward_log_time = current_time
+            self.log(self.__class__.__name__ + "_reward-log_" + self.time_str, new_reward) ## log reward
+    
+
     def log(self, file_name, item):
-        if os.path.exists(file_name):
+        text = "{:.2f}, ".format(item)
+        path = "logs/" + file_name
+        if os.path.exists(path):
             append_write = 'a' # append if already exists
         else:
             append_write = 'w' # make a new file if not
-        f = open("logs/" + file_name, append_write)
-        f.write("{:.2f}, ".format(item))
+        f = open(path, append_write)
+        f.write(text)
         f.close()
 
     def log_episode(self):

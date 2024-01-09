@@ -92,7 +92,7 @@ class QLearningAI5(AIInterface):
             return
         
         # retrieve state
-        player = self.frame_data.get_character(True)
+        player = self.frame_data.get_character(True) # todo, make dynamic to know which player we actually are
         enemy = self.frame_data.get_character(False)
         
         state = self.get_state(player, enemy)
@@ -150,6 +150,7 @@ class QLearningAI5(AIInterface):
         else:
             print("Tie.")
         self.current_action = None
+        self.last_action = None
         self.episode += 1
         self.log_episode()
         health_diff = round_result.remaining_hps[0] - round_result.remaining_hps[1]
