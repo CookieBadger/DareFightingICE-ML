@@ -20,6 +20,8 @@ from tkinter import PhotoImage
 # print who won at end of round and end of game
 # use center of hitbox instead of player.x and enemy.x
 
+TRAINING : bool = False
+
 # Training parameters
 learning_rate = 0.1
 
@@ -97,7 +99,7 @@ class QLearningAI5(AIInterface):
         
         state = self.get_state(player, enemy)
 
-        if self.current_action:
+        if TRAINING and self.current_action:
             if not self.forced_action: # only learn when action was not forced
                 time_passed = self.frame_data.current_frame_number / 60
                 max_hp = self.game_data.max_hps[1]
@@ -151,8 +153,9 @@ class QLearningAI5(AIInterface):
             print("Tie.")
         self.current_action = None
         self.last_action = None
-        self.episode += 1
-        self.log_episode()
+        if TRAINING:
+            self.episode += 1
+            self.log_episode()
         health_diff = round_result.remaining_hps[0] - round_result.remaining_hps[1]
         self.log(self.__class__.__name__ + "_health-diff-log_" + self.time_str, health_diff)
 
@@ -187,7 +190,7 @@ class QLearningAI5(AIInterface):
 
     def epsilon_greedy_policy(self, state, epsilon):
         random_f = random.uniform(0,1)
-        if random_f > epsilon:
+        if not TRAINING or random_f > epsilon:  
             action = self.qtable.get_best_action(state)
         else:
             action = self.random_action(state)

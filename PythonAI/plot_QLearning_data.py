@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 import os.path
+import numpy as np
 
-reward_file_name = "logs/QLearningAI4_reward-log_12-55"
+#reward_file_name = "logs/QLearningAI5_reward-log_11-47"
+reward_file_name = "logs/QLearningAI5_reward-log_19-57"
+#reward_file_name = "logs/QLearningAI5_reward-log_12-52"
 
 ## Print rewards
 
@@ -23,14 +26,15 @@ if os.path.isfile(reward_file_name):
             if e:
                 reward_array.append(float(e))
     f.close()
-    plt.subplot(221)
+    plt.subplot(231)
     plt.plot(reward_array)
     plt.xlabel("seconds")
     plt.ylabel("reward")
     plt.title("Reward progression")
     #plt.yticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
-health_diff_file_name = "logs/QLearningAI4_health-diff-log_12-55"
+health_diff_file_name = "logs/QLearningAI5_health-diff-log_19-57"
+#health_diff_file_name = "logs/QLearningAI5_health-diff-log_12-52"
 if os.path.isfile(health_diff_file_name):
     f = open(health_diff_file_name, "r")
     str = f.read()
@@ -41,7 +45,7 @@ if os.path.isfile(health_diff_file_name):
             if e:
                 diff_array.append(float(e))
     f.close()
-    plt.subplot(222)
+    plt.subplot(232)
     plt.bar(range(len(diff_array)), diff_array)
     plt.xlabel("round nr")
     plt.ylabel("player-enemy health difference")
@@ -55,7 +59,7 @@ if os.path.isfile(health_diff_file_name):
         av_array.append(avg)
         i += 3
     f.close()
-    plt.subplot(223)
+    plt.subplot(233)
     plt.bar(range(len(av_array)), av_array)
     plt.xlabel("game nr")
     plt.ylabel("player-enemy health difference")
@@ -80,15 +84,34 @@ if os.path.isfile(health_diff_file_name):
     win_array = []
     i=2
     while i < len(diff_array) :
-        wins = (step(diff_array[i-2])+ step(diff_array[i-1])+ step(diff_array[i]))
+        wins = (np.sign(diff_array[i-2])+ np.sign(diff_array[i-1])+ np.sign(diff_array[i]))
         win_array.append(wins)
         i += 3
     f.close()
-    plt.subplot(224)
+    plt.subplot(234)
     plt.bar(range(len(win_array)), win_array)
     plt.xlabel("game nr")
-    plt.ylabel("Round Wins")
-    plt.title("Performance over Games (rounds won)")
+    plt.ylabel("Win-loss difference")
+    plt.title("Performance over Games (rounds won minus rounds lost)")
     #plt.yticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    
+    win_array = []
+    n_games_per_bar = 5
+    i=n_games_per_bar*3-1
+    while i < len(diff_array) :
+        d5 = 0
+        for j in range(n_games_per_bar):
+            d5 += (np.sign(diff_array[i-2-j*3])+ np.sign(diff_array[i-1-j*3])+ np.sign(diff_array[i-j*3]))
+        win_array.append(d5)
+        i += n_games_per_bar*3
+    f.close()
+    plt.subplot(235)
+    plt.bar(range(len(win_array)), win_array)
+    plt.xlabel("game nr")
+    plt.ylabel("Win-loss difference")
+    plt.title("Best of 5 (rounds won minus rounds lost in {:d} games)".format(n_games_per_bar))
+    #plt.yticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
 
 plt.show()

@@ -10,11 +10,12 @@ def start_game(port: int):
     character = 'ZEN'
     game_num = 1
     agent1 = DeepQLearningAI()
-    agent2 = IdleAI()
-    ai_name = agent2.__class__.__name__
-    gateway.register_ai("QLearningAI5", agent1)
-    gateway.register_ai(ai_name, agent2)
-    gateway.run_game([character, character], ["QLearningAI5", ai_name], game_num)
+    agent2 = KickAI()
+    ai_name1 = agent1.__class__.__name__
+    ai_name2 = agent2.__class__.__name__
+    gateway.register_ai(ai_name1, agent1)
+    gateway.register_ai(ai_name2, agent2)
+    gateway.run_game([character, character], [ai_name1, ai_name2], game_num)
     gateway.close()
 
 if __name__ == '__main__':
