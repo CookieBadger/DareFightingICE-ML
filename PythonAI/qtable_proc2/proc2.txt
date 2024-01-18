@@ -1,0 +1,2 @@
+Procedure:
+100 Games against MCTS AI

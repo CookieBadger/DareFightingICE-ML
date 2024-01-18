@@ -1,6 +1,6 @@
 import logging
 import argparse
-from QLearningAI4 import QLearningAI4
+from DeepQLearningAISimplified import DeepQLearningAISimplified
 from pyftg import Gateway
 
 if __name__ == '__main__':
@@ -15,9 +15,10 @@ if __name__ == '__main__':
     gateway = Gateway(port=args.port)
     character = 'ZEN'
     game_num = 1
-    agent1 = QLearningAI4()
-    gateway.register_ai("QLearningAI4", agent1)
-    gateway.load_agent(["QLearningAI4"])
+    agent1 = DeepQLearningAISimplified()
+    ai_name1 = agent1.__class__.__name__
+    gateway.register_ai(ai_name1, agent1)
+    gateway.load_agent([ai_name1])
     #gateway.load_agent([args.a1])
     gateway.start_ai()
     gateway.close()

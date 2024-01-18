@@ -1,0 +1,4 @@
+Procedure: 
+30 games against idle AI
+30 Games against Kick AI
+100 Games against MCTS AI

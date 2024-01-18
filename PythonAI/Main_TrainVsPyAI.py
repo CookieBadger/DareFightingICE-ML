@@ -8,13 +8,14 @@ from QLearningAI5 import QLearningAI5
 def start_game(port: int):
     gateway = Gateway(port=port)
     character = 'ZEN'
-    game_num = 1
+    game_num = 10
     agent1 = QLearningAI5()
     agent2 = KickAI()
-    ai_name = agent2.__class__.__name__
-    gateway.register_ai("QLearningAI5", agent1)
-    gateway.register_ai(ai_name, agent2)
-    gateway.run_game([character, character], ["QLearningAI5", ai_name], game_num)
+    ai_name1 = agent1.__class__.__name__
+    ai_name2 = agent2.__class__.__name__
+    gateway.register_ai(ai_name1, agent1)
+    gateway.register_ai(ai_name2, agent2)
+    gateway.run_game([character, character], [ai_name1, ai_name2], game_num)
     gateway.close()
 
 if __name__ == '__main__':

@@ -42,7 +42,7 @@ BATCH_SIZE = 128
 GAMMA = 0.99
 MAX_EPSILON = 0.9
 MIN_EPSILON = 0.05
-DECAY_RATE = 0.001
+DECAY_RATE = 0.01
 TAU = 0.005
 LEARNING_RATE = 1e-4
 
@@ -168,7 +168,7 @@ class DeepQLearningAI(AIInterface):
         # Create an image from the numpy array
         image = Image.fromarray(img_data, 'RGB')
         image_array = np.array(image)
-        image_array = img_data / 255 # convert to 0..1
+        image_array = image_array / 255 # convert to 0..1
         image_tensor = torch.from_numpy(image_array).float()
 
         mean = [0.50032169, 0.5016008, 0.50118719]
@@ -210,8 +210,6 @@ class DeepQLearningAI(AIInterface):
         if self.cc.get_skill_flag():
             self.key = self.cc.get_skill_key()
         else:
-            self.key.empty()
-            self.cc.skill_cancel()
             
             epsilon = MIN_EPSILON + (MAX_EPSILON - MIN_EPSILON) * math.exp(-self.episode * DECAY_RATE)
             
@@ -226,9 +224,13 @@ class DeepQLearningAI(AIInterface):
             
                 self.current_action_tensor = action_tensor
                 self.last_state = self.get_state()
-            self.last_action = action
+            
+            if action != self.last_action:
+                self.key.empty()
+                self.cc.skill_cancel()
+                self.cc.command_call(action)
 
-            self.cc.command_call(action)
+            self.last_action = action
         
         if not self.forced_action:
             self.force_count = 0

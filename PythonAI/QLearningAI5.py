@@ -20,22 +20,18 @@ from tkinter import PhotoImage
 # print who won at end of round and end of game
 # use center of hitbox instead of player.x and enemy.x
 
-TRAINING : bool = False
+TRAINING : bool = True
 
 # Training parameters
 learning_rate = 0.1
 
-# Evaluation parameters
-n_eval_episodes = 1000
-
 # Environment parameters
 gamma = 0.95
-eval_seed = []
 
 # Exploration parameters
 max_epsilon = 1.0
 min_epsilon = 0.05 
-decay_rate = 0.005 
+decay_rate = 0.01
 
 ## tutorial: https://www.datacamp.com/tutorial/introduction-q-learning-beginner-tutorial
 
@@ -115,9 +111,6 @@ class QLearningAI5(AIInterface):
         if self.cc.get_skill_flag():
             self.key = self.cc.get_skill_key()
         else:
-            self.key.empty()
-            self.cc.skill_cancel()
-            
             epsilon = min_epsilon + (max_epsilon - min_epsilon)*np.exp(-decay_rate*self.episode)
             action = self.force_action_policy(state)
             if action != None:
@@ -126,11 +119,14 @@ class QLearningAI5(AIInterface):
             else:
                 action = self.epsilon_greedy_policy(state, epsilon)
                 self.forced_action = False
-
+            
+            if action != self.last_action:
+                self.key.empty()
+                self.cc.skill_cancel()
+                self.cc.command_call(action)
             self.current_action = action
             self.last_action = action
 
-            self.cc.command_call(action)
             # if last action, measure reward of last action
             # update Qtable with reward
             # choose action, remember state and action 

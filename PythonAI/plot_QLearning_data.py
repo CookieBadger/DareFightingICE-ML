@@ -3,8 +3,11 @@ import os.path
 import numpy as np
 
 #reward_file_name = "logs/QLearningAI5_reward-log_11-47"
-reward_file_name = "logs/QLearningAI5_reward-log_19-57"
-#reward_file_name = "logs/QLearningAI5_reward-log_12-52"
+#reward_file_name = "logs/QLearningAI5_proc2evaluation_reward-log_14-0"
+#reward_file_name = "logs/DeepQLearningAISimplified_reward-log_15-33"
+#reward_file_name = "logs/DeepQLearningAISimplified2_reward-log_18-7"
+#reward_file_name = "logs/DeepQLearningAI_reward-log_15-33"
+reward_file_name = "logs/DeepQLearningAISingleImage_reward-log_0-11"
 
 ## Print rewards
 
@@ -33,8 +36,30 @@ if os.path.isfile(reward_file_name):
     plt.title("Reward progression")
     #plt.yticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
-health_diff_file_name = "logs/QLearningAI5_health-diff-log_19-57"
+ep_reward_file_name = "logs/DeepQLearningAISingleImage_episode-reward-log_0-11"
+if os.path.isfile(ep_reward_file_name):
+    f = open(ep_reward_file_name, "r")
+    cum_array = []
+    str = f.read()
+    if str:
+        for e in str.split(','):
+            e=e.strip()
+            if e:
+                cum = cum_array[len(cum_array)-1] if len(cum_array)>0 else 0
+                cum_array.append(cum + float(e))
+    f.close()
+    plt.subplot(236)
+    plt.plot(cum_array)
+    plt.xlabel("episodes")
+    plt.ylabel("reward")
+    plt.title("Reward progression")
+
+#health_diff_file_name = "logs/QLearningAI5_proc2evaluation_health-diff-log_14-0"
 #health_diff_file_name = "logs/QLearningAI5_health-diff-log_12-52"
+#health_diff_file_name = "logs/DeepQLearningAISimplified2_health-diff-log_18-7"
+#health_diff_file_name = "logs/DeepQLearningAI_health-diff-log_15-33"
+#health_diff_file_name = "logs/DeepQLearningAISimplified_health-diff-log_15-33"
+health_diff_file_name = "logs/DeepQLearningAISingleImage_health-diff-log_0-11"
 if os.path.isfile(health_diff_file_name):
     f = open(health_diff_file_name, "r")
     str = f.read()
@@ -76,8 +101,6 @@ if os.path.isfile(health_diff_file_name):
         avg = sum / n
         n_av_array.append(avg)
         i += 1
-    print(n_av_array)
-    print(len(av_array)-(n-1))
     plt.plot(range(len(av_array)-4), n_av_array, "r-")
 
     
@@ -94,7 +117,6 @@ if os.path.isfile(health_diff_file_name):
     plt.ylabel("Win-loss difference")
     plt.title("Performance over Games (rounds won minus rounds lost)")
     #plt.yticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-
     
     win_array = []
     n_games_per_bar = 5
