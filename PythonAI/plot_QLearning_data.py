@@ -2,12 +2,12 @@ import matplotlib.pyplot as plt
 import os.path
 import numpy as np
 
-#reward_file_name = "logs/QLearningAI5_reward-log_11-47"
+reward_file_name = "logs/QLearningAI5_reward-log_23-33"
 #reward_file_name = "logs/QLearningAI5_proc2evaluation_reward-log_14-0"
 #reward_file_name = "logs/DeepQLearningAISimplified_reward-log_15-33"
 #reward_file_name = "logs/DeepQLearningAISimplified2_reward-log_18-7"
 #reward_file_name = "logs/DeepQLearningAI_reward-log_15-33"
-reward_file_name = "logs/DeepQLearningAISingleImage_reward-log_0-11"
+#reward_file_name = "logs/DeepQLearningAISingleImage_reward-log_0-11"
 
 ## Print rewards
 
@@ -36,7 +36,8 @@ if os.path.isfile(reward_file_name):
     plt.title("Reward progression")
     #plt.yticks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
-ep_reward_file_name = "logs/DeepQLearningAISingleImage_episode-reward-log_0-11"
+#ep_reward_file_name = "logs/DeepQLearningAISingleImage_episode-reward-log_0-11"
+ep_reward_file_name = "logs/QLearningAI5_episode-reward-log_23-33"
 if os.path.isfile(ep_reward_file_name):
     f = open(ep_reward_file_name, "r")
     cum_array = []
@@ -55,11 +56,11 @@ if os.path.isfile(ep_reward_file_name):
     plt.title("Reward progression")
 
 #health_diff_file_name = "logs/QLearningAI5_proc2evaluation_health-diff-log_14-0"
-#health_diff_file_name = "logs/QLearningAI5_health-diff-log_12-52"
+health_diff_file_name = "logs/QLearningAI5_health-diff-log_23-33"
 #health_diff_file_name = "logs/DeepQLearningAISimplified2_health-diff-log_18-7"
 #health_diff_file_name = "logs/DeepQLearningAI_health-diff-log_15-33"
 #health_diff_file_name = "logs/DeepQLearningAISimplified_health-diff-log_15-33"
-health_diff_file_name = "logs/DeepQLearningAISingleImage_health-diff-log_0-11"
+#health_diff_file_name = "logs/DeepQLearningAISingleImage_health-diff-log_0-11"
 if os.path.isfile(health_diff_file_name):
     f = open(health_diff_file_name, "r")
     str = f.read()

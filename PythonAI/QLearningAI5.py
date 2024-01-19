@@ -20,7 +20,7 @@ from tkinter import PhotoImage
 # print who won at end of round and end of game
 # use center of hitbox instead of player.x and enemy.x
 
-TRAINING : bool = True
+TRAINING : bool = False
 
 # Training parameters
 learning_rate = 0.1
@@ -31,7 +31,7 @@ gamma = 0.95
 # Exploration parameters
 max_epsilon = 1.0
 min_epsilon = 0.05 
-decay_rate = 0.01
+decay_rate = 0.005
 
 ## tutorial: https://www.datacamp.com/tutorial/introduction-q-learning-beginner-tutorial
 
@@ -56,6 +56,7 @@ class QLearningAI5(AIInterface):
         self.written = False
         self.forced_action = False
         self.force_count = 0
+        self.last_reward = 0
 
     def name(self) -> str:
         return self.__class__.__name__
@@ -105,6 +106,7 @@ class QLearningAI5(AIInterface):
                 player_health_lost_over_time = player_health_lost / time_passed
                 energy_reward = 0.375*(min(player.energy,200)/200)
                 reward = enemy_health_lost - player_health_lost + energy_reward
+                self.last_reward = reward
                 self.learn(self.current_action, self.last_state, reward)
             self.current_action = None
         
@@ -186,7 +188,7 @@ class QLearningAI5(AIInterface):
 
     def epsilon_greedy_policy(self, state, epsilon):
         random_f = random.uniform(0,1)
-        if not TRAINING or random_f > epsilon:  
+        if random_f > epsilon:  
             action = self.qtable.get_best_action(state)
         else:
             action = self.random_action(state)
@@ -271,6 +273,7 @@ class QLearningAI5(AIInterface):
         f = open(self.episode_filename, "w")
         f.write(str(self.episode))
         f.close()
+        self.log(self.__class__.__name__ + "_episode-reward-log_" + self.time_str, self.last_reward)
     
     def load_episode(self):
         if os.path.isfile(self.episode_filename):
