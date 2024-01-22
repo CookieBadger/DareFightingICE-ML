@@ -7,20 +7,11 @@ import time
 import datetime
 import os.path
 from math import *
-import io
-import threading
-
-import tkinter as tk
-from PIL import Image, ImageTk
-from tkinter import PhotoImage
-
-## Improvement: 
-# use energy levels and special action in states
-# use stageX and stageY parameters
-# print who won at end of round and end of game
-# use center of hitbox instead of player.x and enemy.x
 
 TRAINING : bool = False
+LOGGING : bool = False
+
+## tutorial: https://www.datacamp.com/tutorial/introduction-q-learning-beginner-tutorial
 
 # Training parameters
 learning_rate = 0.1
@@ -32,8 +23,6 @@ gamma = 0.95
 max_epsilon = 1.0
 min_epsilon = 0.05 
 decay_rate = 0.005
-
-## tutorial: https://www.datacamp.com/tutorial/introduction-q-learning-beginner-tutorial
 
 class QLearningAI5(AIInterface):
     def __init__(self):
@@ -91,19 +80,16 @@ class QLearningAI5(AIInterface):
             return
         
         # retrieve state
-        player = self.frame_data.get_character(True) # todo, make dynamic to know which player we actually are
+        player = self.frame_data.get_character(True)
         enemy = self.frame_data.get_character(False)
         
         state = self.get_state(player, enemy)
 
         if TRAINING and self.current_action:
             if not self.forced_action: # only learn when action was not forced
-                time_passed = self.frame_data.current_frame_number / 60
                 max_hp = self.game_data.max_hps[1]
                 enemy_health_lost =  (max_hp - enemy.hp)/max_hp
                 player_health_lost =  (max_hp - player.hp)/max_hp
-                enemy_health_lost_over_time = enemy_health_lost / time_passed
-                player_health_lost_over_time = player_health_lost / time_passed
                 energy_reward = 0.375*(min(player.energy,200)/200)
                 reward = enemy_health_lost - player_health_lost + energy_reward
                 self.last_reward = reward
@@ -129,9 +115,6 @@ class QLearningAI5(AIInterface):
             self.current_action = action
             self.last_action = action
 
-            # if last action, measure reward of last action
-            # update Qtable with reward
-            # choose action, remember state and action 
         self.last_state = state
         if not self.forced_action:
             self.force_count = 0
@@ -181,7 +164,7 @@ class QLearningAI5(AIInterface):
         if started_crouching and state[2] != State.CROUCH.value: # if we crouch, commit to it
             return "CROUCH" 
         if started_idling and state[2] == State.CROUCH.value:
-            return "5" #idle
+            return "5" # idle
         if self.force_count < 1 and self.last_action == "FORWARD_WALK":
             return "FORWARD_WALK"
         return None
@@ -224,19 +207,8 @@ class QLearningAI5(AIInterface):
         player_y = (player.top+player.bottom)/2
         enemy_x = (enemy.right+enemy.left)/2
         enemy_y = (enemy.top+enemy.bottom)/2
-        #player.hp, enemy.hp, player.energy, enemy.energy, self.last_action, player.state, player.action, enemy.state, enemy.action
-        #print("pX: ", player_x, ", eX: ", enemy_x, ", pY: ", player_y, ", eY: ", enemy_y)
         player_enemy_y = enemy_y - player_y
         player_enemy_x = enemy_x - player_x
-        #half_qx = (PLAYER_ENEMY_X-1)/2 # half the length of the playerEnemyX state
-        #base=1.5
-        #power = pow(base, half_qx)-1
-        
-        #quantized_player_enemy_x = round(min(max(player_enemy_x / GAME_WIDTH, -1), 1) * half_qx+half_qx)
-        #h = (player_enemy_x / GAME_WIDTH * power)
-        #sign = copysign(1, h)
-        #player_enemy_x_log = sign * log(abs(h+sign), base)
-        #quantized_player_enemy_x_log = round(player_enemy_x_log + half_qx)
         quantized_player_enemy_x_log = logarithmic_quantize_symmetric_around_zero(player_enemy_x, PLAYER_ENEMY_X, 1.5, GAME_WIDTH)
         
         half_qy = (PLAYER_ENEMY_Y-1)/2
@@ -258,6 +230,8 @@ class QLearningAI5(AIInterface):
             self.log(self.__class__.__name__ + "_reward-log_" + self.time_str, new_reward) ## log reward
     
     def log(self, file_name, item):
+        if not LOGGING:
+            return
         text = "{:.2f}, ".format(item)
         path = "logs/" + file_name
         if os.path.exists(path):
@@ -269,7 +243,8 @@ class QLearningAI5(AIInterface):
         f.close()
 
     def log_episode(self):
-        #print("logged reward: {:.2f}".format(reward))
+        if not LOGGING:
+            return
         f = open(self.episode_filename, "w")
         f.write(str(self.episode))
         f.close()
@@ -300,16 +275,6 @@ def get_energy_level(energy):
     if energy >= 55: return 1
     return 0
     
-
-# Multi-dimensional table for Q-learning. 
-# Dimensions: 
-# player position & enemy position
-# OR: player-enemy vector? (probably better)
-# action
-# energy ()
-# health (very roughly quantized)
-
-# QTable dimensions (quantizations):
 GAME_WIDTH = 960
 PLAY_HEIGHT = 500
 
@@ -317,7 +282,6 @@ PLAYER_ENEMY_X = 21
 PLAYER_ENEMY_Y = 5 # needs to be odd
 PLAYER_STATE = len(State) # 4
 ENEMY_STATE = len(State)
-
 
 # Additional: IDLE ("5") possible in all states
 STAND_ACTIONS = ["FORWARD_WALK","DASH","BACK_STEP","CROUCH","FOR_JUMP","BACK_JUMP","STAND_GUARD","THROW_A","THROW_B","STAND_A","STAND_B","STAND_FA","STAND_FB","STAND_D_DF_FA","STAND_D_DF_FB","STAND_F_D_DFA","STAND_F_D_DFB","STAND_D_DB_BA","STAND_D_DB_BB","STAND_D_DF_FC"]
@@ -349,16 +313,12 @@ class QTable:
             self.table = np.load(self.file_path)
         except FileNotFoundError:
             # doesn't exist
-            #self.stand_table = np.zeros((len(STAND_ACTIONS)+1, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
-            #self.air_table = np.zeros((len(AIR_ACTIONS)+1, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
-            #self.crouch_table = np.zeros((len(CROUCH_ACTIONS)+2, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
             self.table = np.zeros((len(STAND_ACTIONS)+len(AIR_ACTIONS)+len(CROUCH_ACTIONS)+1, PLAYER_ENEMY_X, PLAYER_ENEMY_Y, PLAYER_STATE, ENEMY_STATE, PLAYER_ENERGY, ENEMY_ENERGY))
             
     
     def get_reward(self, action, state):
         action_idx = self.get_action_idx(action)
         reward = self.table[action_idx, state[0], state[1], state[2], state[3], state[4], state[5]]
-        #print("Reward at [",action_idx,",",state[0],",",state[1],",",state[2],"]: ", reward)
         return reward
     
     def update(self, action, state, reward):
@@ -394,6 +354,8 @@ class QTable:
         return action_idx
     
     def save(self):
+        if not LOGGING:
+            return
         if(self.write):
             print("Updated table saved to ", self.file_path)
             np.save(self.file_path, self.table)

@@ -10,37 +10,22 @@ import time
 import datetime
 import os.path
 
-import matplotlib
-import matplotlib.pyplot as plt
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 
-from PIL import Image, ImageTk
+from PIL import Image
 
 from collections import namedtuple, deque
-from itertools import count
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 TRAINING = False
-
-
-GAME_WIDTH = 960
-PLAY_HEIGHT = 500
+LOGGING = False
 
 SCREENDATA_WIDTH = 32
 SCREENDATA_HEIGHT = 32
 
-# BATCH_SIZE is the number of transitions sampled from the replay buffer
-# GAMMA is the discount factor as mentioned in the previous section
-# MAX_EPSILON is the starting value of epsilon
-# MIN_EPSILON is the final value of epsilon
-# DECAY_RATE controls the rate of exponential decay of epsilon, higher means a slower decay
-# TAU is the update rate of the target network
-# LEARNING_RATE is the learning rate of the ``AdamW`` optimizer
 BATCH_SIZE = 128
 GAMMA = 0.99
 MAX_EPSILON = 0.9
@@ -191,7 +176,7 @@ class DeepQLearningAISingleImage(AIInterface):
         if self.frame_data.empty_flag or self.frame_data.current_frame_number <= 0 or not self.screen_data:
             return
         
-        player_state = self.frame_data.get_character(True) # todo, make dynamic to know which player we actually are
+        player_state = self.frame_data.get_character(True)
 
         if TRAINING and self.current_action_tensor != None and self.last_state != None and self.screen_data != None:
             if not self.forced_action:
@@ -285,12 +270,9 @@ class DeepQLearningAISingleImage(AIInterface):
             next_state_values = self.target_net(next_states).max(1).values
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * GAMMA) + reward_batch
-        #print("reward batch: ", reward_batch.size())
         # Huber loss
         criterion = nn.SmoothL1Loss()
-        #print("calculating loss: nextstate_values ", next_state_values.size(), "; expected_state_action: ", expected_state_action_values.size())
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1)) ### check (debug) dimensions. C:\Users\Emil\AppData\Local\Programs\Python\Python310\lib\site-packages\torch\nn\modules\loss.py:933: UserWarning: Using a target size (torch.Size([128, 1, 128])) that is different to the input size (torch.Size([128, 1])). This will likely lead to incorrect results due to broadcasting. Please ensure they have the same size. return F.smooth_l1_loss(input, target, reduction=self.reduction, beta=self.beta)
-
+        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1)) 
         self.optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
@@ -325,8 +307,8 @@ class DeepQLearningAISingleImage(AIInterface):
         max_hp = self.game_data.max_hps[1]
         enemy_health_lost =  (max_hp - enemy.hp)/max_hp
         player_health_lost =  (max_hp - player.hp)/max_hp
-        #energy_reward = 0.375*(min(player.energy,200)/200)
-        return enemy_health_lost - player_health_lost #+ energy_reward
+        energy_reward = 0.375*(min(player.energy,200)/200)
+        return enemy_health_lost - player_health_lost + energy_reward
         
     def round_end(self, round_result: RoundResult):
         print("Round End. Finished Episode ", self.episode)
@@ -365,10 +347,12 @@ class DeepQLearningAISingleImage(AIInterface):
         print(".")
         self.wins = 0
         self.losses = 0
-        if TRAINING:
+        if TRAINING and LOGGING:
             torch.save(self.policy_net.state_dict(), self.model_save_file)  
     
     def log_reward(self, new_reward):
+        if not LOGGING:
+            return
         current_time = time.time()
         if current_time - self.last_reward_log_time > 1:
             self.last_reward_log_time = current_time
@@ -376,6 +360,8 @@ class DeepQLearningAISingleImage(AIInterface):
     
 
     def log(self, file_name, item):
+        if not LOGGING:
+            return
         text = "{:.2f}, ".format(item)
         path = "logs/" + file_name
         if os.path.exists(path):
@@ -387,7 +373,8 @@ class DeepQLearningAISingleImage(AIInterface):
         f.close()
 
     def log_episode(self):
-        #print("logged reward: {:.2f}".format(reward))
+        if not LOGGING:
+            return
         f = open(self.episode_filename, "w")
         f.write(str(self.episode))
         f.close()
@@ -445,36 +432,3 @@ class DQN(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         return x
-
-
-
-
-
-""" episode = 0
-episode_durations = []
-
-
-def plot_durations(show_result=False):
-    plt.figure(1)
-    durations_t = torch.tensor(episode_durations, dtype=torch.float)
-    if show_result:
-        plt.title('Result')
-    else:
-        plt.clf()
-        plt.title('Training...')
-    plt.xlabel('Episode')
-    plt.ylabel('Duration')
-    plt.plot(durations_t.numpy())
-    # Take 100 episode averages and plot them too
-    if len(durations_t) >= 100:
-        means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
-
-    plt.pause(0.001)  # pause a bit so that plots are updated
-    if is_ipython:
-        if not show_result:
-            display.display(plt.gcf())
-            display.clear_output(wait=True)
-        else:
-            display.display(plt.gcf()) """
